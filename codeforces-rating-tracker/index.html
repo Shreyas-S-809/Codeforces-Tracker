@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codeforces Rating Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: { cf: '#0a84ff', cfDark: '#0060c0' },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background: #000000; color: #e6edf3; }
+    .card { background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 12px; }
+    .spinner { border: 3px solid #1a1a1a; border-top-color: #0a84ff; border-radius: 50%; width: 20px; height: 20px; animation: spin .6s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 3px; }
+    table th { position: sticky; top: 0; background: #0a0a0a; z-index: 1; }
+    .time-btn { padding: 4px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #1a1a1a; background: transparent; color: #6b7280; cursor: pointer; transition: all .15s; }
+    .time-btn:hover { border-color: #0a84ff; color: #0a84ff; }
+    .time-btn.active { background: #0a84ff; border-color: #0a84ff; color: #fff; }
+  </style>
+</head>
+<body class="font-sans min-h-screen">
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="text-center mb-8">
+      <h1 class="text-2xl md:text-3xl font-bold">
+        <span class="text-cf">⟨/⟩</span> Codeforces Rating Tracker
+      </h1>
+      <p class="text-sm text-gray-500 mt-1">Track and visualize rating changes over time</p>
+    </header>
+
+    <!-- Search Bar -->
+    <div class="card p-4 mb-6 flex flex-wrap gap-3 items-center justify-center">
+      <input id="handleInput" type="text" placeholder="Codeforces handle" class="bg-[#000000] border border-[#1a1a1a] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-cf w-52" />
+      <button id="fetchBtn" onclick="fetchRating()" class="bg-cf hover:bg-cfDark text-white text-sm font-medium px-5 py-2 rounded-lg transition">Fetch</button>
+      <button onclick="fetchRating(true)" title="Refresh" class="bg-[#000000] border border-[#1a1a1a] hover:border-cf text-gray-400 hover:text-cf text-sm px-3 py-2 rounded-lg transition">↻</button>
+      <button onclick="clearCache()" title="Clear cache" class="bg-[#000000] border border-[#1a1a1a] hover:border-red-500 text-gray-400 hover:text-red-400 text-sm px-3 py-2 rounded-lg transition">✕ Cache</button>
+      <span id="spinner" class="spinner hidden"></span>
+    </div>
+
+    <!-- Error -->
+    <div id="error" class="hidden card border-red-900/50 bg-red-950/30 text-red-400 text-sm p-3 mb-6 text-center rounded-lg"></div>
+
+    <!-- Last updated -->
+    <p id="lastUpdated" class="hidden text-xs text-gray-600 text-center mb-4"></p>
+
+    <!-- Stats Row -->
+    <div id="statsRow" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6"></div>
+
+    <!-- Chart -->
+    <div id="chartCard" class="hidden card p-4 md:p-6 mb-6">
+      <div class="flex flex-wrap gap-2 mb-4" id="timeControls">
+        <button class="time-btn active" onclick="setRange('all')">All</button>
+        <button class="time-btn" onclick="setRange('2y')">2Y</button>
+        <button class="time-btn" onclick="setRange('1y')">1Y</button>
+        <button class="time-btn" onclick="setRange('6m')">6M</button>
+        <button class="time-btn" onclick="setRange('3m')">3M</button>
+        <button class="time-btn" onclick="setRange('1m')">1M</button>
+        <button class="time-btn" onclick="setRange('1w')">1W</button>
+      </div>
+      <canvas id="ratingChart"></canvas>
+    </div>
+
+    <!-- Table -->
+    <div id="tableCard" class="hidden card overflow-auto max-h-[420px]">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-[#1a1a1a]">
+            <th class="px-4 py-3 text-left">Date</th>
+            <th class="px-4 py-3 text-left">Contest</th>
+            <th class="px-4 py-3 text-right">Rank</th>
+            <th class="px-4 py-3 text-right">Old</th>
+            <th class="px-4 py-3 text-right">New</th>
+            <th class="px-4 py-3 text-right">Δ</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <footer class="text-center text-xs text-gray-600 mt-10">
+      Data from <a href="https://codeforces.com" class="text-cf hover:underline" target="_blank">Codeforces API</a> · Rating Tracker
+    </footer>
+  </div>
+
+  <script>
+    let chart = null;
+    let allContests = [];
+    let currentRange = 'all';
+
+    // URL param
+    const params = new URLSearchParams(window.location.search);
+    const urlHandle = params.get('handle');
+    if (urlHandle) {
+      document.getElementById('handleInput').value = urlHandle;
+      window.addEventListener('DOMContentLoaded', () => fetchRating());
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+    function hideError() { document.getElementById('error').classList.add('hidden'); }
+
+    function cacheKey(handle) { return 'cf_rating_' + handle.toLowerCase(); }
+
+    function clearCache() {
+      const handle = document.getElementById('handleInput').value.trim();
+      if (handle) localStorage.removeItem(cacheKey(handle));
+      else {
+        Object.keys(localStorage).filter(k => k.startsWith('cf_rating_')).forEach(k => localStorage.removeItem(k));
+      }
+      hideError();
+      showError('Cache cleared.');
+    }
+
+    async function fetchRating(forceRefresh = false) {
+      hideError();
+      const handle = document.getElementById('handleInput').value.trim();
+      if (!handle) { showError('Please enter a Codeforces handle.'); return; }
+
+      const key = cacheKey(handle);
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          try {
+            const data = JSON.parse(cached);
+            // use cache if < 30 min old
+            if (Date.now() - data.ts < 30 * 60 * 1000) { render(data.result, data.ts); return; }
+          } catch {}
+        }
+      }
+
+      const spinner = document.getElementById('spinner');
+      const btn = document.getElementById('fetchBtn');
+      spinner.classList.remove('hidden');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`https://codeforces.com/api/user.rating?handle=${encodeURIComponent(handle)}`);
+        if (!res.ok) {
+          if (res.status === 400) throw new Error('Handle not found. Check spelling.');
+          if (res.status === 429) throw new Error('Rate limited. Try again in a minute.');
+          throw new Error(`API error (${res.status}).`);
+        }
+        const json = await res.json();
+        if (json.status !== 'OK') throw new Error(json.comment || 'API returned an error.');
+        if (!json.result || json.result.length === 0) throw new Error('No contest history for this handle.');
+
+        const ts = Date.now();
+        localStorage.setItem(key, JSON.stringify({ result: json.result, ts }));
+        render(json.result, ts);
+      } catch (e) {
+        if (e instanceof TypeError) showError('Network error. Check your connection.');
+        else showError(e.message);
+      } finally {
+        spinner.classList.add('hidden');
+        btn.disabled = false;
+      }
+    }
+
+    function render(contests, ts) {
+      allContests = contests;
+      currentRange = 'all';
+      // Last updated
+      const luEl = document.getElementById('lastUpdated');
+      luEl.textContent = 'Last updated: ' + new Date(ts).toLocaleString();
+      luEl.classList.remove('hidden');
+
+      renderStats(contests);
+      renderChart(contests);
+      renderTable(contests);
+      // reset active button
+      document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.time-btn').classList.add('active');
+    }
+
+    function setRange(range) {
+      currentRange = range;
+      document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      const now = Date.now() / 1000;
+      const ranges = { '1w': 7*86400, '1m': 30*86400, '3m': 90*86400, '6m': 180*86400, '1y': 365*86400, '2y': 730*86400 };
+      let filtered = allContests;
+      if (range !== 'all' && ranges[range]) {
+        const cutoff = now - ranges[range];
+        filtered = allContests.filter(c => c.ratingUpdateTimeSeconds > cutoff);
+      }
+      if (filtered.length === 0) { filtered = allContests.slice(-1); }
+      renderChart(filtered);
+    }
+
+    function renderStats(c) {
+      const cur = c[c.length - 1].newRating;
+      const peak = Math.max(...c.map(x => x.newRating));
+      const low = Math.min(...c.map(x => x.newRating));
+      const deltas = c.map(x => x.newRating - x.oldRating);
+      const avg = (deltas.reduce((a, b) => a + b, 0) / deltas.length).toFixed(0);
+      const thirtyDaysAgo = Date.now() / 1000 - 30 * 86400;
+      const recent = c.filter(x => x.ratingUpdateTimeSeconds > thirtyDaysAgo);
+      const last30 = recent.length ? recent.reduce((s, x) => s + x.newRating - x.oldRating, 0) : '—';
+
+      const stats = [
+        { label: 'Current Rating', value: cur, color: ratingColor(cur) },
+        { label: 'Total Contests', value: c.length, color: 'text-gray-200' },
+        { label: 'Peak Rating', value: peak, color: 'text-green-400' },
+        { label: 'Lowest Rating', value: low, color: 'text-red-400' },
+        { label: 'Avg Δ', value: (avg > 0 ? '+' : '') + avg, color: avg >= 0 ? 'text-green-400' : 'text-red-400' },
+        { label: 'Last 30d Δ', value: last30 === '—' ? '—' : (last30 > 0 ? '+' : '') + last30, color: last30 === '—' ? 'text-gray-500' : last30 >= 0 ? 'text-green-400' : 'text-red-400' },
+      ];
+
+      const row = document.getElementById('statsRow');
+      row.innerHTML = stats.map(s => `
+        <div class="card p-4 text-center">
+          <div class="text-xs text-gray-500 mb-1">${s.label}</div>
+          <div class="text-xl font-bold ${s.color}">${s.value}</div>
+        </div>`).join('');
+      row.classList.remove('hidden');
+    }
+
+    function ratingColor(r) {
+      if (r >= 2400) return 'text-red-500';
+      if (r >= 2100) return 'text-orange-400';
+      if (r >= 1900) return 'text-purple-400';
+      if (r >= 1600) return 'text-blue-400';
+      if (r >= 1400) return 'text-cyan-400';
+      if (r >= 1200) return 'text-green-400';
+      return 'text-gray-400';
+    }
+
+    function renderChart(contests) {
+      document.getElementById('chartCard').classList.remove('hidden');
+      const ctx = document.getElementById('ratingChart');
+
+      const labels = contests.map(c => new Date(c.ratingUpdateTimeSeconds * 1000));
+      const data = contests.map(c => c.newRating);
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Rating',
+            data,
+            borderColor: '#0a84ff',
+            backgroundColor: 'rgba(10,132,255,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: '#0a84ff',
+            pointHoverRadius: 6,
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const i = items[0].dataIndex;
+                  return contests[i].contestName;
+                },
+                afterTitle: (items) => {
+                  const i = items[0].dataIndex;
+                  const c = contests[i];
+                  const d = c.newRating - c.oldRating;
+                  return `Rank: ${c.rank}  |  Δ: ${d > 0 ? '+' : ''}${d}`;
+                },
+                label: (item) => `Rating: ${item.raw}`,
+              },
+              backgroundColor: '#0a0a0a',
+              borderColor: '#1a1a1a',
+              borderWidth: 1,
+              titleColor: '#e6edf3',
+              bodyColor: '#8b949e',
+              padding: 10,
+            },
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'month', tooltipFormat: 'MMM d, yyyy' },
+              grid: { color: '#111111' },
+              ticks: { color: '#3a3a3a', maxTicksLimit: 12 },
+            },
+            y: {
+              grid: { color: '#111111' },
+              ticks: { color: '#3a3a3a' },
+            },
+          },
+        },
+      });
+    }
+
+    function renderTable(contests) {
+      document.getElementById('tableCard').classList.remove('hidden');
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = [...contests].reverse().map(c => {
+        const d = c.newRating - c.oldRating;
+        const cls = d > 0 ? 'text-green-400' : d < 0 ? 'text-red-400' : 'text-gray-400';
+        const sign = d > 0 ? '+' : '';
+        const date = new Date(c.ratingUpdateTimeSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<tr class="border-t border-[#111111] hover:bg-[#0f0f0f] transition">
+          <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${date}</td>
+          <td class="px-4 py-2.5 max-w-[240px] truncate">${escapeHtml(c.contestName)}</td>
+          <td class="px-4 py-2.5 text-right text-gray-400">${c.rank}</td>
+          <td class="px-4 py-2.5 text-right">${c.oldRating}</td>
+          <td class="px-4 py-2.5 text-right font-medium">${c.newRating}</td>
+          <td class="px-4 py-2.5 text-right font-medium ${cls}">${sign}${d}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>
