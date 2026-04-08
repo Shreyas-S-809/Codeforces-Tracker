@@ -35,7 +35,7 @@
   </style>
 </head>
 <body class="font-sans min-h-screen">
-  <div class="max-w-5xl mx-auto px-4 py-8">
+  <div class="max-w-7xl mx-auto px-4 py-8">
     <!-- Header -->
     <header class="text-center mb-8">
       <h1 class="text-2xl md:text-3xl font-bold">
@@ -50,6 +50,7 @@
       <button id="fetchBtn" onclick="fetchRating()" class="bg-cf hover:bg-cfDark text-white text-sm font-medium px-5 py-2 rounded-lg transition">Fetch</button>
       <button onclick="fetchRating(true)" title="Refresh" class="bg-[#000000] border border-[#1a1a1a] hover:border-cf text-gray-400 hover:text-cf text-sm px-3 py-2 rounded-lg transition">↻</button>
       <button onclick="clearCache()" title="Clear cache" class="bg-[#000000] border border-[#1a1a1a] hover:border-red-500 text-gray-400 hover:text-red-400 text-sm px-3 py-2 rounded-lg transition">✕ Cache</button>
+      <button onclick="openCompare()" title="Compare handles" class="bg-[#000000] border border-[#1a1a1a] hover:border-green-500 text-gray-400 hover:text-green-400 text-sm px-3 py-2 rounded-lg transition">⇄ Compare</button>
       <span id="spinner" class="spinner hidden"></span>
     </div>
 
@@ -62,35 +63,95 @@
     <!-- Stats Row -->
     <div id="statsRow" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6"></div>
 
-    <!-- Chart -->
-    <div id="chartCard" class="hidden card p-4 md:p-6 mb-6">
-      <div class="flex flex-wrap gap-2 mb-4" id="timeControls">
-        <button class="time-btn active" onclick="setRange('all')">All</button>
-        <button class="time-btn" onclick="setRange('2y')">2Y</button>
-        <button class="time-btn" onclick="setRange('1y')">1Y</button>
-        <button class="time-btn" onclick="setRange('6m')">6M</button>
-        <button class="time-btn" onclick="setRange('3m')">3M</button>
-        <button class="time-btn" onclick="setRange('1m')">1M</button>
-        <button class="time-btn" onclick="setRange('1w')">1W</button>
+    <!-- Chart + Table side by side -->
+    <div id="chartTableRow" class="hidden flex flex-col md:flex-row gap-4 mb-6 md:h-[420px]">
+      <div class="card p-4 md:p-6 md:w-[70%] w-full flex flex-col">
+        <div class="flex flex-wrap gap-2 mb-4" id="timeControls">
+          <button class="time-btn active" onclick="setRange('all')">All</button>
+          <button class="time-btn" onclick="setRange('2y')">2Y</button>
+          <button class="time-btn" onclick="setRange('1y')">1Y</button>
+          <button class="time-btn" onclick="setRange('6m')">6M</button>
+          <button class="time-btn" onclick="setRange('3m')">3M</button>
+          <button class="time-btn" onclick="setRange('1m')">1M</button>
+          <button class="time-btn" onclick="setRange('1w')">1W</button>
+        </div>
+        <div class="flex-1 min-h-0 relative"><canvas id="ratingChart"></canvas></div>
       </div>
-      <canvas id="ratingChart"></canvas>
+      <div class="card md:w-[30%] w-full overflow-y-auto max-h-[420px] md:max-h-none">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-gray-400 text-[10px] uppercase tracking-wider border-b border-[#1a1a1a]">
+              <th class="px-2 py-2 text-left">Date</th>
+              <th class="px-2 py-2 text-left">Contest</th>
+              <th class="px-2 py-2 text-right">New</th>
+              <th class="px-2 py-2 text-right">Δ</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Table -->
-    <div id="tableCard" class="hidden card overflow-auto max-h-[420px]">
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-[#1a1a1a]">
-            <th class="px-4 py-3 text-left">Date</th>
-            <th class="px-4 py-3 text-left">Contest</th>
-            <th class="px-4 py-3 text-right">Rank</th>
-            <th class="px-4 py-3 text-right">Old</th>
-            <th class="px-4 py-3 text-right">New</th>
-            <th class="px-4 py-3 text-right">Δ</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+    <!-- Compare Modal -->
+    <div id="compareModal" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,.85)">
+      <div class="card p-6 w-full max-w-sm mx-4">
+        <h3 class="text-lg font-semibold mb-4">Compare Handles</h3>
+        <input id="compareHandle1" type="text" placeholder="Handle 1" class="bg-[#000000] border border-[#1a1a1a] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-cf w-full mb-3" />
+        <input id="compareHandle2" type="text" placeholder="Handle 2" class="bg-[#000000] border border-[#1a1a1a] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-cf w-full mb-4" />
+        <div class="flex gap-3">
+          <button onclick="startCompare()" class="bg-cf hover:bg-cfDark text-white text-sm font-medium px-5 py-2 rounded-lg transition flex-1">Compare</button>
+          <button onclick="closeCompare()" class="bg-[#000000] border border-[#1a1a1a] text-gray-400 text-sm px-5 py-2 rounded-lg transition">Cancel</button>
+        </div>
+        <div id="compareError" class="hidden text-red-400 text-xs mt-3 text-center"></div>
+        <span id="compareSpinner" class="spinner hidden mt-3"></span>
+      </div>
+    </div>
+
+    <!-- Compare View -->
+    <div id="compareView" class="hidden mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold"><span class="text-cf" id="cmpLabel1"></span> vs <span class="text-green-400" id="cmpLabel2"></span></h2>
+        <button onclick="exitCompare()" class="bg-[#000000] border border-[#1a1a1a] hover:border-red-500 text-gray-400 hover:text-red-400 text-sm px-3 py-2 rounded-lg transition">✕ Exit Compare</button>
+      </div>
+      <!-- Combined Chart -->
+      <div class="card p-4 md:p-6 mb-6">
+        <div class="flex flex-wrap gap-2 mb-4" id="cmpTimeControls">
+          <button class="time-btn active" onclick="setCmpRange('all')">All</button>
+          <button class="time-btn" onclick="setCmpRange('2y')">2Y</button>
+          <button class="time-btn" onclick="setCmpRange('1y')">1Y</button>
+          <button class="time-btn" onclick="setCmpRange('6m')">6M</button>
+          <button class="time-btn" onclick="setCmpRange('3m')">3M</button>
+          <button class="time-btn" onclick="setCmpRange('1m')">1M</button>
+          <button class="time-btn" onclick="setCmpRange('1w')">1W</button>
+        </div>
+        <canvas id="compareChart"></canvas>
+      </div>
+      <!-- Split Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <h3 class="text-sm font-medium text-cf mb-2 text-center" id="cmpStatsLabel1"></h3>
+          <div id="cmpStats1" class="grid grid-cols-3 gap-2"></div>
+        </div>
+        <div>
+          <h3 class="text-sm font-medium text-green-400 mb-2 text-center" id="cmpStatsLabel2"></h3>
+          <div id="cmpStats2" class="grid grid-cols-3 gap-2"></div>
+        </div>
+      </div>
+      <!-- Split Tables -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card overflow-auto max-h-[380px]">
+          <table class="w-full text-xs">
+            <thead><tr class="text-gray-400 uppercase tracking-wider border-b border-[#1a1a1a]"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Contest</th><th class="px-3 py-2 text-right">New</th><th class="px-3 py-2 text-right">Δ</th></tr></thead>
+            <tbody id="cmpTable1"></tbody>
+          </table>
+        </div>
+        <div class="card overflow-auto max-h-[380px]">
+          <table class="w-full text-xs">
+            <thead><tr class="text-gray-400 uppercase tracking-wider border-b border-[#1a1a1a]"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Contest</th><th class="px-3 py-2 text-right">New</th><th class="px-3 py-2 text-right">Δ</th></tr></thead>
+            <tbody id="cmpTable2"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <footer class="text-center text-xs text-gray-600 mt-10">
@@ -245,7 +306,7 @@
     }
 
     function renderChart(contests) {
-      document.getElementById('chartCard').classList.remove('hidden');
+      document.getElementById('chartTableRow').classList.remove('hidden');
       const ctx = document.getElementById('ratingChart');
 
       const labels = contests.map(c => new Date(c.ratingUpdateTimeSeconds * 1000));
@@ -271,6 +332,7 @@
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
@@ -313,20 +375,17 @@
     }
 
     function renderTable(contests) {
-      document.getElementById('tableCard').classList.remove('hidden');
       const tbody = document.getElementById('tableBody');
       tbody.innerHTML = [...contests].reverse().map(c => {
         const d = c.newRating - c.oldRating;
         const cls = d > 0 ? 'text-green-400' : d < 0 ? 'text-red-400' : 'text-gray-400';
         const sign = d > 0 ? '+' : '';
-        const date = new Date(c.ratingUpdateTimeSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const date = new Date(c.ratingUpdateTimeSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
         return `<tr class="border-t border-[#111111] hover:bg-[#0f0f0f] transition">
-          <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${date}</td>
-          <td class="px-4 py-2.5 max-w-[240px] truncate">${escapeHtml(c.contestName)}</td>
-          <td class="px-4 py-2.5 text-right text-gray-400">${c.rank}</td>
-          <td class="px-4 py-2.5 text-right">${c.oldRating}</td>
-          <td class="px-4 py-2.5 text-right font-medium">${c.newRating}</td>
-          <td class="px-4 py-2.5 text-right font-medium ${cls}">${sign}${d}</td>
+          <td class="px-2 py-1.5 text-gray-400 whitespace-nowrap">${date}</td>
+          <td class="px-2 py-1.5 max-w-[120px] truncate">${escapeHtml(c.contestName)}</td>
+          <td class="px-2 py-1.5 text-right">${c.newRating}</td>
+          <td class="px-2 py-1.5 text-right font-medium ${cls}">${sign}${d}</td>
         </tr>`;
       }).join('');
     }
@@ -335,6 +394,156 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // ---- Compare Mode ----
+    let compareChartObj = null;
+    let cmpData1 = [], cmpData2 = [], cmpH1 = '', cmpH2 = '';
+
+    function openCompare() {
+      const h = document.getElementById('handleInput').value.trim();
+      document.getElementById('compareHandle1').value = h;
+      document.getElementById('compareHandle2').value = '';
+      document.getElementById('compareError').classList.add('hidden');
+      document.getElementById('compareModal').classList.remove('hidden');
+    }
+    function closeCompare() { document.getElementById('compareModal').classList.add('hidden'); }
+
+    function exitCompare() {
+      document.getElementById('compareView').classList.add('hidden');
+      if (compareChartObj) { compareChartObj.destroy(); compareChartObj = null; }
+      // Restore single-person view if data exists
+      if (allContests.length) {
+        document.getElementById('statsRow').classList.remove('hidden');
+        document.getElementById('chartTableRow').classList.remove('hidden');
+        document.getElementById('lastUpdated').classList.remove('hidden');
+      }
+    }
+
+    async function fetchHandleData(handle) {
+      const key = cacheKey(handle);
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          if (Date.now() - data.ts < 30 * 60 * 1000) return data.result;
+        } catch {}
+      }
+      const res = await fetch(`https://codeforces.com/api/user.rating?handle=${encodeURIComponent(handle)}`);
+      if (!res.ok) throw new Error(`"${handle}" not found or API error.`);
+      const json = await res.json();
+      if (json.status !== 'OK' || !json.result?.length) throw new Error(`No data for "${handle}".`);
+      localStorage.setItem(key, JSON.stringify({ result: json.result, ts: Date.now() }));
+      return json.result;
+    }
+
+    async function startCompare() {
+      const h1 = document.getElementById('compareHandle1').value.trim();
+      const h2 = document.getElementById('compareHandle2').value.trim();
+      const errEl = document.getElementById('compareError');
+      errEl.classList.add('hidden');
+      if (!h1 || !h2) { errEl.textContent = 'Enter both handles.'; errEl.classList.remove('hidden'); return; }
+      if (h1.toLowerCase() === h2.toLowerCase()) { errEl.textContent = 'Handles must be different.'; errEl.classList.remove('hidden'); return; }
+
+      const sp = document.getElementById('compareSpinner');
+      sp.classList.remove('hidden');
+      try {
+        const [d1, d2] = await Promise.all([fetchHandleData(h1), fetchHandleData(h2)]);
+        closeCompare();
+        renderCompare(h1, d1, h2, d2);
+      } catch (e) {
+        errEl.textContent = e.message; errEl.classList.remove('hidden');
+      } finally { sp.classList.add('hidden'); }
+    }
+
+    function renderCompare(h1, c1, h2, c2) {
+      cmpH1 = h1; cmpH2 = h2; cmpData1 = c1; cmpData2 = c2;
+      // Hide single-person view
+      document.getElementById('statsRow').classList.add('hidden');
+      document.getElementById('chartTableRow').classList.add('hidden');
+      document.getElementById('lastUpdated').classList.add('hidden');
+      const view = document.getElementById('compareView');
+      view.classList.remove('hidden');
+      document.getElementById('cmpLabel1').textContent = h1;
+      document.getElementById('cmpLabel2').textContent = h2;
+
+      // reset time buttons
+      document.querySelectorAll('#cmpTimeControls .time-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('#cmpTimeControls .time-btn').classList.add('active');
+
+      renderCompareChart(c1, c2);
+
+      // Stats
+      renderCompareStats('cmpStats1', 'cmpStatsLabel1', h1, c1);
+      renderCompareStats('cmpStats2', 'cmpStatsLabel2', h2, c2);
+
+      // Tables
+      renderCompareTable('cmpTable1', c1);
+      renderCompareTable('cmpTable2', c2);
+    }
+
+    function renderCompareChart(c1, c2) {
+      if (compareChartObj) compareChartObj.destroy();
+      compareChartObj = new Chart(document.getElementById('compareChart'), {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: cmpH1, data: c1.map(c => ({ x: c.ratingUpdateTimeSeconds * 1000, y: c.newRating })), borderColor: '#0a84ff', backgroundColor: 'rgba(10,132,255,0.05)', fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+            { label: cmpH2, data: c2.map(c => ({ x: c.ratingUpdateTimeSeconds * 1000, y: c.newRating })), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.05)', fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: { legend: { labels: { color: '#8b949e' } }, tooltip: { backgroundColor: '#0a0a0a', borderColor: '#1a1a1a', borderWidth: 1, titleColor: '#e6edf3', bodyColor: '#8b949e', padding: 10 } },
+          scales: {
+            x: { type: 'time', time: { unit: 'month', tooltipFormat: 'MMM d, yyyy' }, grid: { color: '#111111' }, ticks: { color: '#3a3a3a', maxTicksLimit: 12 } },
+            y: { grid: { color: '#111111' }, ticks: { color: '#3a3a3a' } },
+          },
+        },
+      });
+    }
+
+    function setCmpRange(range) {
+      document.querySelectorAll('#cmpTimeControls .time-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      const now = Date.now() / 1000;
+      const ranges = { '1w': 7*86400, '1m': 30*86400, '3m': 90*86400, '6m': 180*86400, '1y': 365*86400, '2y': 730*86400 };
+      let f1 = cmpData1, f2 = cmpData2;
+      if (range !== 'all' && ranges[range]) {
+        const cutoff = now - ranges[range];
+        f1 = cmpData1.filter(c => c.ratingUpdateTimeSeconds > cutoff);
+        f2 = cmpData2.filter(c => c.ratingUpdateTimeSeconds > cutoff);
+      }
+      if (f1.length === 0) f1 = cmpData1.slice(-1);
+      if (f2.length === 0) f2 = cmpData2.slice(-1);
+      renderCompareChart(f1, f2);
+    }
+
+    function renderCompareStats(elId, labelId, handle, c) {
+      document.getElementById(labelId).textContent = handle;
+      const cur = c[c.length - 1].newRating;
+      const peak = Math.max(...c.map(x => x.newRating));
+      const low = Math.min(...c.map(x => x.newRating));
+      const deltas = c.map(x => x.newRating - x.oldRating);
+      const avg = (deltas.reduce((a, b) => a + b, 0) / deltas.length).toFixed(0);
+      const stats = [
+        { label: 'Current', value: cur, color: ratingColor(cur) },
+        { label: 'Peak', value: peak, color: 'text-green-400' },
+        { label: 'Contests', value: c.length, color: 'text-gray-200' },
+        { label: 'Lowest', value: low, color: 'text-red-400' },
+        { label: 'Avg Δ', value: (avg > 0 ? '+' : '') + avg, color: avg >= 0 ? 'text-green-400' : 'text-red-400' },
+      ];
+      document.getElementById(elId).innerHTML = stats.map(s => `<div class="card p-3 text-center"><div class="text-[10px] text-gray-500 mb-1">${s.label}</div><div class="text-base font-bold ${s.color}">${s.value}</div></div>`).join('');
+    }
+
+    function renderCompareTable(tbodyId, contests) {
+      document.getElementById(tbodyId).innerHTML = [...contests].reverse().map(c => {
+        const d = c.newRating - c.oldRating;
+        const cls = d > 0 ? 'text-green-400' : d < 0 ? 'text-red-400' : 'text-gray-400';
+        const date = new Date(c.ratingUpdateTimeSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+        return `<tr class="border-t border-[#111111] hover:bg-[#0f0f0f]"><td class="px-3 py-1.5 text-gray-400 whitespace-nowrap">${date}</td><td class="px-3 py-1.5 max-w-[140px] truncate">${escapeHtml(c.contestName)}</td><td class="px-3 py-1.5 text-right">${c.newRating}</td><td class="px-3 py-1.5 text-right font-medium ${cls}">${d > 0 ? '+' : ''}${d}</td></tr>`;
+      }).join('');
     }
   </script>
 </body>
